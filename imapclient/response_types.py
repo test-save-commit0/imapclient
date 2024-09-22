@@ -1,30 +1,25 @@
-# Copyright (c) 2014, Menno Smits
-# Released subject to the New BSD License
-# Please see http://en.wikipedia.org/wiki/BSD_licenses
-
 import dataclasses
 import datetime
 from email.utils import formataddr
 from typing import Any, List, Optional, Tuple, TYPE_CHECKING, Union
-
 from .typing_imapclient import _Atom
 from .util import to_unicode
 
 
 @dataclasses.dataclass
 class Envelope:
-    r"""Represents envelope structures of messages. Returned when parsing
+    """Represents envelope structures of messages. Returned when parsing
     ENVELOPE responses.
 
     :ivar date: A datetime instance that represents the "Date" header.
     :ivar subject: A string that contains the "Subject" header.
-    :ivar from\_: A tuple of Address objects that represent one or more
+    :ivar from\\_: A tuple of Address objects that represent one or more
       addresses from the "From" header, or None if header does not exist.
-    :ivar sender: As for from\_ but represents the "Sender" header.
-    :ivar reply_to: As for from\_ but represents the "Reply-To" header.
-    :ivar to: As for from\_ but represents the "To" header.
-    :ivar cc: As for from\_ but represents the "Cc" header.
-    :ivar bcc: As for from\_ but represents the "Bcc" recipients.
+    :ivar sender: As for from\\_ but represents the "Sender" header.
+    :ivar reply_to: As for from\\_ but represents the "Reply-To" header.
+    :ivar to: As for from\\_ but represents the "To" header.
+    :ivar cc: As for from\\_ but represents the "Cc" header.
+    :ivar bcc: As for from\\_ but represents the "Bcc" recipients.
     :ivar in_reply_to: A string that contains the "In-Reply-To" header.
     :ivar message_id: A string that contains the "Message-Id" header.
 
@@ -55,12 +50,12 @@ class Envelope:
     """
     date: Optional[datetime.datetime]
     subject: bytes
-    from_: Optional[Tuple["Address", ...]]
-    sender: Optional[Tuple["Address", ...]]
-    reply_to: Optional[Tuple["Address", ...]]
-    to: Optional[Tuple["Address", ...]]
-    cc: Optional[Tuple["Address", ...]]
-    bcc: Optional[Tuple["Address", ...]]
+    from_: Optional[Tuple['Address', ...]]
+    sender: Optional[Tuple['Address', ...]]
+    reply_to: Optional[Tuple['Address', ...]]
+    to: Optional[Tuple['Address', ...]]
+    cc: Optional[Tuple['Address', ...]]
+    bcc: Optional[Tuple['Address', ...]]
     in_reply_to: bytes
     message_id: bytes
 
@@ -88,18 +83,16 @@ class Address:
     See also :py:class:`Envelope` for information about handling of
     "group syntax".
     """
-
     name: bytes
     route: bytes
     mailbox: bytes
     host: bytes
 
-    def __str__(self) -> str:
+    def __str__(self) ->str:
         if self.mailbox and self.host:
-            address = to_unicode(self.mailbox) + "@" + to_unicode(self.host)
+            address = to_unicode(self.mailbox) + '@' + to_unicode(self.host)
         else:
             address = to_unicode(self.mailbox or self.host)
-
         return formataddr((to_unicode(self.name), address))
 
 
@@ -117,32 +110,10 @@ class SearchIds(List[int]):
         self.modseq: Optional[int] = None
 
 
-_BodyDataType = Tuple[Union[bytes, int, "BodyData"], "_BodyDataType"]
+_BodyDataType = Tuple[Union[bytes, int, 'BodyData'], '_BodyDataType']
 
 
 class BodyData(_BodyDataType):
     """
     Returned when parsing BODY and BODYSTRUCTURE responses.
     """
-
-    @classmethod
-    def create(cls, response: Tuple[_Atom, ...]) -> "BodyData":
-        # In case of multipart messages we will see at least 2 tuples
-        # at the start. Nest these in to a list so that the returned
-        # response tuple always has a consistent number of elements
-        # regardless of whether the message is multipart or not.
-        if isinstance(response[0], tuple):
-            # Multipart, find where the message part tuples stop
-            parts = []
-            for i, part in enumerate(response):
-                if isinstance(part, bytes):
-                    break
-                if TYPE_CHECKING:
-                    assert isinstance(part, tuple)
-                parts.append(part)
-            return cls(([cls.create(part) for part in parts],) + response[i:])
-        return cls(response)
-
-    @property
-    def is_multipart(self) -> bool:
-        return isinstance(self[0], list)
