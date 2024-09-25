@@ -239,7 +239,7 @@ class IMAPClient:
            This includes reading from and writing to the socket,
            as they are likely to break internal bookkeeping of messages.
         """
-        pass
+        return self._imap.sock
 
     @require_capability('STARTTLS')
     def starttls(self, ssl_context=None):
@@ -259,13 +259,37 @@ class IMAPClient:
         Raises :py:exc:`AbortError` if the server does not support STARTTLS
         or an SSL connection is already established.
         """
-        pass
+        if self.ssl:
+            raise self.AbortError('SSL connection already established')
+
+        if ssl_context is None:
+            ssl_context = ssl_lib.create_default_context()
+
+        typ, data = self._imap._simple_command('STARTTLS')
+        if typ != 'OK':
+            raise self.Error('STARTTLS failed: %s' % data[0].decode())
+
+        self._imap.sock = ssl_context.wrap_socket(self._imap.sock,
+                                                  server_hostname=self.host)
+        self._imap.file = self._imap.sock.makefile('rb')
+        self.ssl = True
+        self._starttls_done = True
+
+        # Reissue CAPABILITY command after STARTTLS
+        self._cached_capabilities = None
+        self.capabilities()
 
     def login(self, username: str, password: str):
         """Login using *username* and *password*, returning the
         server response.
         """
-        pass
+        try:
+            rv = self._imap.login(username, password)
+        except imaplib.IMAP4.error as e:
+            raise self.Error(str(e))
+
+        self._cached_capabilities = None
+        return rv
 
     def oauth2_login(self, user: str, access_token: str, mech: str=
         'XOAUTH2', vendor: Optional[str]=None):
@@ -274,7 +298,21 @@ class IMAPClient:
         Gmail and Yahoo both support the 'XOAUTH2' mechanism, but Yahoo requires
         the 'vendor' portion in the payload.
         """
-        pass
+        auth_string = 'user=%s\1auth=Bearer %s\1' % (user, access_token)
+        if vendor:
+            auth_string += 'vendor=%s\1' % vendor
+        auth_string += '\1'
+        
+        try:
+            if mech == 'XOAUTH2':
+                rv = self._imap.authenticate('XOAUTH2', lambda x: auth_string)
+            else:
+                rv = self._imap.authenticate('OAUTH2', lambda x: auth_string)
+        except imaplib.IMAP4.error as e:
+            raise self.Error(str(e))
+
+        self._cached_capabilities = None
+        return rv
 
     def oauthbearer_login(self, identity, access_token):
         """Authenticate using the OAUTHBEARER method.
