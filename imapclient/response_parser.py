@@ -22,7 +22,27 @@ def parse_response(data: List[bytes]) ->Tuple[_Atom, ...]:
 
     Returns nested tuples of appropriately typed objects.
     """
-    pass
+    lexer = TokenSource(data)
+    return tuple(_parse_tokens(lexer))
+
+def _parse_tokens(lexer: TokenSource) ->Iterator[_Atom]:
+    for token in lexer:
+        if token == b'(':
+            yield tuple(_parse_tokens(lexer))
+        elif token == b')':
+            return
+        elif isinstance(token, bytes):
+            yield _convert_token(token, lexer.current_literal)
+        else:
+            raise ProtocolError(f'Unexpected token: {token}')
+
+def _convert_token(token: bytes, literal: Optional[bytes]) ->_Atom:
+    if literal is not None:
+        return literal
+    try:
+        return int(token)
+    except ValueError:
+        return token
 
 
 _msg_id_pattern = re.compile('(\\d+(?: +\\d+)*)')
@@ -39,7 +59,22 @@ def parse_message_list(data: List[Union[bytes, str]]) ->SearchIds:
     attribute which contains the MODSEQ response (if returned by the
     server).
     """
-    pass
+    data = [item.decode('ascii') if isinstance(item, bytes) else item for item in data]
+    data = ' '.join(data)
+    
+    modseq = None
+    if 'MODSEQ' in data:
+        modseq_index = data.index('MODSEQ')
+        modseq = int(data[modseq_index + 1])
+        data = data[:modseq_index]
+    
+    ids = [int(num) for num in _msg_id_pattern.findall(data)]
+    search_ids = SearchIds(ids)
+    
+    if modseq:
+        search_ids.modseq = modseq
+    
+    return search_ids
 
 
 _ParseFetchResponseInnerDict = Dict[bytes, Optional[Union[datetime.datetime,
@@ -53,4 +88,30 @@ def parse_fetch_response(text: List[bytes], normalise_times: bool=True,
     Returns a dictionary, keyed by message ID. Each value a dictionary
     keyed by FETCH field type (eg."RFC822").
     """
-    pass
+    response = defaultdict(dict)
+    for response_item in parse_response(text):
+        msg_id, fetch_data = response_item
+        msg_id = int(msg_id)
+        
+        for field, value in _parse_fetch_pairs(fetch_data):
+            field = field.upper()
+            
+            if field == b'UID' and uid_is_key:
+                msg_id = value
+            elif field == b'INTERNALDATE' and normalise_times:
+                value = parse_to_datetime(value)
+            elif field in (b'BODY', b'BODY.PEEK'):
+                value = BodyData(value)
+            elif field == b'ENVELOPE':
+                value = Envelope(*value)
+            
+            response[msg_id][field] = value
+    
+    return response
+
+def _parse_fetch_pairs(fetch_data: Tuple[_Atom, ...]) ->Iterator[Tuple[bytes, _Atom]]:
+    for i in range(0, len(fetch_data), 2):
+        field = fetch_data[i]
+        if not isinstance(field, bytes):
+            raise ProtocolError(f'Field name must be bytes: {field}')
+        yield field, fetch_data[i + 1]
