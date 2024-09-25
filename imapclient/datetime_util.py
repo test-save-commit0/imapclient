@@ -14,7 +14,19 @@ def parse_to_datetime(timestamp: bytes, normalise: bool=True) ->datetime:
     If normalise is False, then the returned datetime will be
     unadjusted but will contain timezone information as per the input.
     """
-    pass
+    if isinstance(timestamp, bytes):
+        timestamp = timestamp.decode('ascii')
+    
+    tt = parsedate_tz(timestamp)
+    if tt is None:
+        raise ValueError("Could not parse datetime string: %r" % timestamp)
+
+    tz = tt[-1]
+    dt = datetime(*tt[:6], tzinfo=FixedOffset(tz) if tz else None)
+
+    if normalise:
+        return dt.astimezone().replace(tzinfo=None)
+    return dt
 
 
 def datetime_to_INTERNALDATE(dt: datetime) ->str:
@@ -23,7 +35,10 @@ def datetime_to_INTERNALDATE(dt: datetime) ->str:
     If timezone information is missing the current system
     timezone is used.
     """
-    pass
+    if dt.tzinfo is None:
+        dt = dt.astimezone()
+    
+    return dt.strftime("%d-%b-%Y %H:%M:%S %z")
 
 
 _rfc822_dotted_time = re.compile(
@@ -32,4 +47,6 @@ _rfc822_dotted_time = re.compile(
 
 def format_criteria_date(dt: datetime) ->bytes:
     """Format a date or datetime instance for use in IMAP search criteria."""
-    pass
+    if isinstance(dt, datetime):
+        dt = dt.date()
+    return dt.strftime("%d-%b-%Y").encode('ascii')
