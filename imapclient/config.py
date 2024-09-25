@@ -14,7 +14,25 @@ def parse_config_file(filename: str) ->argparse.Namespace:
 
     Used by livetest.py and interact.py
     """
-    pass
+    config = configparser.ConfigParser()
+    config.read(filename)
+
+    if 'DEFAULT' not in config:
+        raise ValueError(f"Config file {filename} must have a DEFAULT section")
+
+    ns = argparse.Namespace()
+    for key, value in config['DEFAULT'].items():
+        setattr(ns, key, value)
+
+    # Convert certain values to appropriate types
+    if hasattr(ns, 'port'):
+        ns.port = int(ns.port)
+    if hasattr(ns, 'ssl'):
+        ns.ssl = config['DEFAULT'].getboolean('ssl')
+    if hasattr(ns, 'timeout'):
+        ns.timeout = float(ns.timeout)
+
+    return ns
 
 
 T = TypeVar('T')
